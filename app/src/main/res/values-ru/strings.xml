@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cancel">Отмена</string>
+    <string name="save">Сохранить</string>
+    <string name="delete">Удалить</string>
+    <string name="open">Открыть</string>
+    <string name="change">Изменить</string>
+    <string name="stop">Выключить</string>
+    <string name="resume">Включить</string>
+    <string name="pause">Пауза</string>
+    <string name="extend">+1 ч</string>
+
+    <string name="channel_alarm">Звонок</string>
+    <string name="channel_paused">Звонки выключены</string>
+
+    <string name="status_on">Звонки включены</string>
+    <string name="no_rules">Нет правил</string>
+    <string name="rule_count">Правил: %d</string>
+    <string name="paused_until">На паузе до %s</string>
+    <string name="paused_notif_title">Звонки выключены до %s</string>
+    <string name="paused_text">Уведомления по правилам не звонят</string>
+    <string name="pause_title">Выключить звонки</string>
+    <string name="pause_1h">На 1 час</string>
+    <string name="pause_3h">На 3 часа</string>
+    <string name="pause_morning">До утра (%s)</string>
+    <string name="tile_on">Включено</string>
+    <string name="tile_until">До %s</string>
+
+    <string name="banner_listener">Нет доступа к уведомлениям — звонки не сработают</string>
+    <string name="banner_notifications">Уведомления приложения выключены — не будет кнопки «Выключить»</string>
+    <string name="banner_fullscreen">Нет полноэкранных уведомлений — окно звонка не появится на заблокированном экране</string>
+
+    <string name="rules_empty">Добавьте приложение, уведомления которого должны звонить.</string>
+    <string name="add_rule">Добавить правило</string>
+    <string name="test_title">Тест</string>
+    <string name="sound_test_text">Мелодия правила</string>
+
+    <string name="caption_keyword">Звонить только если в уведомлении есть слово</string>
+    <string name="keyword_example">например, созвон</string>
+    <string name="effect_any">Сейчас: звонит любое уведомление приложения «%s»</string>
+    <string name="effect_word">Сейчас: звонит, только если в заголовке или тексте есть «%s»</string>
+    <string name="caption_sound">Мелодия звонка</string>
+    <string name="sound_default">по умолчанию</string>
+    <string name="delete_confirm">Удалить правило «%s»?</string>
+
+    <string name="picker_title">Приложение для правила</string>
+    <string name="picker_search">поиск по названию или пакету</string>
+    <string name="picker_recent">Недавние уведомления</string>
+    <string name="picker_all">Все приложения</string>
+    <string name="picker_all_loading">Все приложения — загрузка…</string>
+    <string name="picker_manual">Ввести пакет вручную</string>
+    <string name="rule_new">Новое правило</string>
+    <string name="rule_pkg_hint">пакет, напр. com.google.android.calendar</string>
+    <string name="rule_keyword_hint">слово в заголовке/тексте</string>
+    <string name="rule_keyword_empty">Пусто — звонить на любое уведомление приложения</string>
+
+    <string name="language_label">Язык приложения</string>
+    <string name="language_title">Язык</string>
+    <string name="language_system">Как в системе</string>
+
+    <string name="about_title">О приложении</string>
+    <string name="about_close">Понятно</string>
+    <string name="about_text">Persista добавляет настойчивый звонок будильника к выбранным уведомлениям. Например, к напоминаниям календаря, чтобы не пропускать встречи.\n\nЧтобы добавить будильник:\n\n1. Нажмите \"Добавить правило\"\n2. Выберите приложение, например \"Календарь\"\n3. Если нужно - добавьте слово или фразу, например \"общее собрание\". Будильник включится, если эта фраза встретится в уведомлении\n4. Выберите мелодию\n5. Нажмите \"Сохранить\"</string>
+</resources>
