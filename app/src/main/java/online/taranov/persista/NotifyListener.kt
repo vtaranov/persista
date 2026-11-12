@@ -12,6 +12,7 @@ class NotifyListener : NotificationListenerService() {
     override fun onListenerConnected() {
         instance = this
         Calls.refresh(this)
+        Snooze.reconcile(this)
     }
 
     override fun onListenerDisconnected() {
@@ -32,6 +33,7 @@ class NotifyListener : NotificationListenerService() {
         val idx = rules.indexOfFirst { it.matches(sbn.packageName, title, text) }
         if (idx < 0) return
         val rule = rules[idx]
+        if (Snooze.containsSource(this, sbn.packageName, sbn.key)) return
 
         val now = System.currentTimeMillis()
         recent.entries.removeAll { now - it.value > DEDUP_MS }
@@ -40,7 +42,7 @@ class NotifyListener : NotificationListenerService() {
 
         Log.i(TAG, "match ${sbn.packageName} rule=#$idx '${rule.keyword}' sound=${rule.sound != null}")
         val app = AppPicker.label(this, sbn.packageName)
-        Ringer.start(this, title.ifBlank { app }, text, rule.sound, app)
+        Ringer.start(this, title.ifBlank { app }, text, rule.sound, app, sbn.packageName, sbn.key)
     }
 
     companion object {

@@ -6,10 +6,10 @@ import android.app.AlertDialog
 import android.app.LocaleManager
 import android.app.NotificationManager
 import android.content.ComponentName
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
-import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -28,6 +28,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 
 class MainActivity : Activity() {
     private lateinit var root: LinearLayout
@@ -37,9 +38,18 @@ class MainActivity : Activity() {
     private val stateListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> render() }
     // Rule card that is open while the system sound picker is on top.
     private var openCard: RuleCard? = null
+    private var draft: Bundle? = null
+    private var draftDialog: AlertDialog? = null
+    private var soundRuleIndex = -1
+    private var soundRule: Rule? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        draft = savedInstanceState?.getBundle("newRule")
+        soundRuleIndex = savedInstanceState?.getInt("soundRuleIndex", -1) ?: -1
+        savedInstanceState?.getBundle("soundRule")?.let {
+            soundRule = Rule(it.getString("pkg").orEmpty(), it.getString("keyword").orEmpty(), it.getString("sound"))
+        }
         p = Ui.palette(this)
         Ui.setupWindow(this, p.bg, lightBars = !Ui.night(this))
         root = LinearLayout(this).apply {
@@ -51,7 +61,7 @@ class MainActivity : Activity() {
             addView(root)
             Ui.applyInsets(this)
         })
-        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 0)
         // Long press on the quick settings tile lands here.
         // Not again when recreated (language change): the activity keeps the tile's intent.
@@ -60,21 +70,100 @@ class MainActivity : Activity() {
         Calls.refresh(this)
     }
 
-    fun openPicker() = AppPicker.show(this) { rule ->
-        Rules.save(this, Rules.load(this) + rule)
-        render()
+    fun openPicker() = AppPicker.show(this) { pkg, keyword ->
+        draft = Bundle().apply {
+            putBoolean("manual", pkg == null)
+            putString("pkg", pkg.orEmpty())
+            putString("keyword", keyword)
+        }
+        showDraft()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBundle("newRule", draft)
+        outState.putInt("soundRuleIndex", soundRuleIndex)
+        soundRule?.let { r -> outState.putBundle("soundRule", Bundle().apply {
+            putString("pkg", r.pkg); putString("keyword", r.keyword); putString("sound", r.sound)
+        }) }
+    }
+
+    private fun showDraft() {
+        val d = draft ?: return
+        if (d.getBoolean("awaitingSound") || draftDialog != null) return
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(8), dp(24), dp(8))
+        }
+        fun field(key: String, hintRes: Int) = EditText(this).apply {
+            isSingleLine = true
+            isSaveEnabled = false // The Activity owns the draft, including across the external picker.
+            hint = getString(hintRes)
+            setText(d.getString(key).orEmpty())
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    d.putString(key, s.toString())
+                }
+                override fun afterTextChanged(s: Editable?) {}
+            })
+        }
+        val pkgField = field("pkg", R.string.rule_pkg_hint)
+        if (d.getBoolean("manual")) box.addView(pkgField)
+        box.addView(field("keyword", R.string.rule_keyword_hint))
+        box.addView(Ui.text(this, getString(R.string.rule_keyword_empty), 12f, p.text2))
+        box.addView(caption(getString(R.string.caption_sound)))
+        box.addView(Ui.text(this, soundTitle(d.getString("sound")), 15f, p.text))
+        box.addView(Ui.link(this, getString(R.string.change), Ui.BRAND, p.press) {
+            d.putBoolean("awaitingSound", true)
+            try {
+                startActivityForResult(Sounds.picker(d.getString("sound")), REQ_NEW_SOUND)
+                draftDialog?.dismiss()
+            } catch (_: ActivityNotFoundException) {
+                d.putBoolean("awaitingSound", false)
+                Toast.makeText(this, R.string.sound_picker_missing, Toast.LENGTH_LONG).show()
+            }
+        })
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(if (d.getBoolean("manual")) getString(R.string.rule_new)
+                else AppPicker.label(this, d.getString("pkg").orEmpty()))
+            .setView(ScrollView(this).apply { addView(box) })
+            .setPositiveButton(R.string.save, null)
+            .setNegativeButton(R.string.cancel) { _, _ -> draft = null }
+            .create()
+        dialog.setOnCancelListener { draft = null }
+        dialog.setOnDismissListener { if (draftDialog === dialog) draftDialog = null }
+        draftDialog = dialog
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            if (draft !== d) return@setOnClickListener
+            val pkg = d.getString("pkg").orEmpty().trim()
+            if (pkg.isEmpty()) { pkgField.error = getString(R.string.rule_pkg_hint); return@setOnClickListener }
+            Rules.save(this, Rules.load(this) + Rule(pkg, d.getString("keyword").orEmpty().trim(), d.getString("sound")))
+            draft = null
+            dialog.dismiss()
+            render()
+        }
     }
 
     override fun onResume() {
         super.onResume()
         Calls.prefs(this).registerOnSharedPreferenceChangeListener(stateListener)
+        Snooze.reconcile(this)
         render()
+        showDraft()
     }
 
     override fun onPause() {
         super.onPause()
         Calls.prefs(this).unregisterOnSharedPreferenceChangeListener(stateListener)
         handler.removeCallbacksAndMessages(null)
+    }
+
+    override fun onDestroy() {
+        draftDialog?.dismiss()
+        openCard?.dialog?.dismiss()
+        super.onDestroy()
     }
 
     private fun render() {
@@ -171,12 +260,14 @@ class MainActivity : Activity() {
     private fun languages() = listOf(null to getString(R.string.language_system)) + LANGUAGES
 
     private fun languageIndex(): Int {
+        if (Build.VERSION.SDK_INT < 33) return 0
         val current = getSystemService(LocaleManager::class.java).applicationLocales
         val code = if (current.isEmpty) null else current[0].language
         return languages().indexOfFirst { it.first == code }.coerceAtLeast(0)
     }
 
     private fun chooseLanguage() {
+        if (Build.VERSION.SDK_INT < 33) return
         val options = languages()
         AlertDialog.Builder(this)
             .setTitle(R.string.language_title)
@@ -232,9 +323,13 @@ class MainActivity : Activity() {
             banner(getString(R.string.banner_notifications)) {
                 startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
             }
-        if (!nm.canUseFullScreenIntent())
+        if (Build.VERSION.SDK_INT >= 34 && !nm.canUseFullScreenIntent())
             banner(getString(R.string.banner_fullscreen)) {
                 startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName")))
+            }
+        if (!Snooze.canSchedule(this))
+            banner(getString(R.string.banner_exact_alarm)) {
+                startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
             }
     }
 
@@ -356,31 +451,36 @@ class MainActivity : Activity() {
             .getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(p.danger)
     }
 
-    private fun soundTitle(sound: String?): String =
-        sound?.let { runCatching { RingtoneManager.getRingtone(this, Uri.parse(it))?.getTitle(this) }.getOrNull() }
-            ?: getString(R.string.sound_default)
+    private fun soundTitle(sound: String?) = Sounds.title(this, sound)
 
     private fun pickSound(index: Int, current: String?) {
-        val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
-            .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
-            .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
-            .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
-            .putExtra(RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
-            .putExtra(
-                RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
-                current?.let(Uri::parse) ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            )
-        startActivityForResult(intent, REQ_SOUND + index)
+        soundRuleIndex = index
+        soundRule = Rules.load(this).getOrNull(index)
+        try { startActivityForResult(Sounds.picker(current), REQ_SOUND) }
+        catch (_: ActivityNotFoundException) {
+            soundRule = null
+            Toast.makeText(this, R.string.sound_picker_missing, Toast.LENGTH_LONG).show()
+        }
     }
 
     @Deprecated("Activity result API is AndroidX-only")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        val index = requestCode - REQ_SOUND
+        if (requestCode == REQ_NEW_SOUND) {
+            val d = draft?.takeIf { it.getBoolean("awaitingSound") } ?: return
+            d.putBoolean("awaitingSound", false)
+            if (resultCode == RESULT_OK) Sounds.picked(data)?.let { d.putString("sound", it.sound) }
+            showDraft()
+            return
+        }
+        if (requestCode != REQ_SOUND) return
+        val expected = soundRule ?: return
+        soundRule = null
+        val index = soundRuleIndex
         val rules = Rules.load(this)
-        if (resultCode != RESULT_OK || index !in rules.indices) return
-        val uri = data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
-        val sound = uri?.takeIf { !RingtoneManager.isDefault(it) }?.toString()
+        if (resultCode != RESULT_OK || rules.getOrNull(index) != expected) return
+        val picked = Sounds.picked(data) ?: return
+        val sound = picked.sound
         Rules.save(this, rules.mapIndexed { j, r -> if (j == index) r.copy(sound = sound) else r })
         openCard?.takeIf { it.index == index }?.soundPicked(sound)
         render()
@@ -390,6 +490,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQ_SOUND = 100
+        private const val REQ_NEW_SOUND = 42
         private val LANGUAGES = listOf("ru" to "Русский", "en" to "English")
     }
 }

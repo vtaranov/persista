@@ -50,7 +50,7 @@ object AppPicker {
         runCatching { pm.getApplicationIcon(pkg) }.getOrElse { pm.defaultActivityIcon }
     }
 
-    fun show(activity: Activity, onRule: (Rule) -> Unit) {
+    fun show(activity: Activity, onApp: (String?, String) -> Unit) {
         val recent = Recent.list()
         var apps = emptyList<App>()
         var query = ""
@@ -126,9 +126,9 @@ object AppPicker {
         list.setOnItemClickListener { _, _, position, _ ->
             dialog.dismiss()
             when (val item = adapter.items[position]) {
-                is FromRecent -> ruleDialog(activity, item.seen.pkg, item.seen.title, onRule)
-                is FromApps -> ruleDialog(activity, item.app.pkg, "", onRule)
-                Manual -> ruleDialog(activity, null, "", onRule)
+                is FromRecent -> onApp(item.seen.pkg, item.seen.title)
+                is FromApps -> onApp(item.app.pkg, "")
+                Manual -> onApp(null, "")
                 is Header -> {}
             }
         }
@@ -147,38 +147,6 @@ object AppPicker {
                 adapter.rebuild()
             }
         }.start()
-    }
-
-    private fun ruleDialog(activity: Activity, pkg: String?, keyword: String, onRule: (Rule) -> Unit) {
-        val box = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(activity, 20), 0, dp(activity, 20), 0)
-        }
-        val pkgField = EditText(activity).apply { hint = activity.getString(R.string.rule_pkg_hint); isSingleLine = true }
-        if (pkg == null) box.addView(pkgField)
-        val kw = EditText(activity).apply {
-            hint = activity.getString(R.string.rule_keyword_hint)
-            isSingleLine = true
-            setText(keyword)
-            setSelectAllOnFocus(true)
-        }
-        box.addView(kw)
-        box.addView(TextView(activity).apply {
-            text = activity.getString(R.string.rule_keyword_empty)
-            alpha = 0.6f
-            textSize = 12f
-        })
-        AlertDialog.Builder(activity)
-            .setTitle(pkg?.let { label(activity, it) } ?: activity.getString(R.string.rule_new))
-            .apply { pkg?.let { setIcon(icon(activity, it)) } }
-            .setView(box)
-            .setPositiveButton(R.string.save) { _, _ ->
-                val p = pkg ?: pkgField.text.toString().trim()
-                if (p.isNotEmpty()) onRule(Rule(p, kw.text.toString().trim()))
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-        kw.requestFocus()
     }
 
     fun row(ctx: Context, icon: Drawable?, title: String, subtitle: String): View =

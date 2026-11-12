@@ -34,7 +34,7 @@ object Calls {
 
     fun pause(ctx: Context, until: Long) {
         save(ctx, until)
-        Ringer.stop()
+        Ringer.stopAll(ctx)
         refresh(ctx)
     }
 
